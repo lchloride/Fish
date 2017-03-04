@@ -52,6 +52,7 @@ int fish_num = 2;
 bool halt = false; // 强制退出标志
 Scalar contour_color[] = { Scalar(0, 165, 255), Scalar(238, 95, 209) };
 AreaStatistic area_statistic;
+const int init_time = 2;// 初始化的时长
 
 //static void onMouse(int event, int x, int y, int /*flags*/, void* /*param*/)
 //{
@@ -70,19 +71,21 @@ int main(int argc, char** argv)
 	Size subPixWinSize(10, 10), winSize(31, 31);
 
 	const int MAX_COUNT = 5;
-	bool needToInit = false;
+	bool needToInit = true;
 	bool nightMode = false;
 	bool updateFeaturePoint = true;
+	
+	int frame_count = 0;
 
 	VideoCapture cap("0204.avi");
 
 	if (!cap.isOpened())
 	{
-		cout << "Could not initialize capturing...\n";
+		cout << "Could not open video...\n";
 		return 0;
 	}
 
-	namedWindow("LK Demo", 1);
+	int FRAME_RATIO = (int)cap.get(CV_CAP_PROP_FPS); // 帧率
 	//setMouseCallback("LK Demo", onMouse, 0);
 
 	Mat gray, prevGray, image;
@@ -100,6 +103,8 @@ int main(int argc, char** argv)
 		if (frame.empty())
 			break;
 
+		frame_count++;
+
 		// 备份视频帧为图片
 		frame.copyTo(image);
 		GaussianBlur(image, image, Size(5, 5), 0, 0);
@@ -116,9 +121,8 @@ int main(int argc, char** argv)
 			image = Scalar::all(0);
 
 		// 需要重新确定特征点的情况
-		if (needToInit)
+		if (frame_count > init_time*FRAME_RATIO && needToInit)
 		{
-			// automatic initialization
 			// 找角点
 			GoodFeaturesToTrack(gray, fgmask, points[1]);
 			seperateFishesByFeaturePt(fgmask, fish_num, points[1], points_index);
@@ -172,7 +176,7 @@ int main(int argc, char** argv)
 			matchArea(gray, fgmask, points[1], points_index, dst);
 		}
 
-		imshow("LK Demo", dst);
+		imshow("Tracking Fishes", dst);
 		
 
 		char c = (char)waitKey(10);
@@ -206,16 +210,12 @@ void getObject(const Mat frame, Mat &dst, Mat &fgmask)
 
 	vector<vector<Point> > contours;
 	Mat mask;
-	//fgmask.release();
 
 	bgsubtractor->apply(frame, mask, update_bg_model ? -1 : 0);
 
 	Mat fgimg;
 	fgimg = Scalar::all(0);
 	frame.copyTo(fgimg, mask);
-	//imshow("fgimg", fgimg);
-	imwrite("mask.jpg", mask);
-	//imwrite("src.jpg", g_srcImage);
 	refineSegments(frame, mask);
 	fgmask = Mat::zeros(frame.size(), CV_8UC1); //掩膜初始化
 	mask.copyTo(fgmask);
@@ -494,7 +494,7 @@ void matchArea(Mat gray, Mat mask, vector<Point2f>& points, vector<int>& points_
 			bool decided = false;
 			for (int j = 0; j < count_min_dist.size(); j++)
 				if (count_min_dist[j] == max_count) {
-					drawContours(err, contours, j, Scalar(212, 255, 127), CV_FILLED, 8, hierarchy);
+					drawContours(err, contours, j, Scalar(130, 25, 25), CV_FILLED, 8, hierarchy);
 					double area = contourArea(contours[j]);
 					cout << "Matching area decision: " << j << ", area: " << area << ", " << area_statistic.checkRange(area) << endl;
 					if (area_statistic.checkRange(area)) {
@@ -528,9 +528,9 @@ void matchArea(Mat gray, Mat mask, vector<Point2f>& points, vector<int>& points_
 			time(&rawtime);
 			timeinfo = localtime(&rawtime);
 			if (decided)
-				strftime(filename, 100, "error_decided_%H_%M_%S.png", timeinfo);
+				strftime(filename, 100, ".\\error\\error_decided_%H_%M_%S.png", timeinfo);
 			else
-				strftime(filename, 100, "error_undecided_%H_%M_%S.png", timeinfo);
+				strftime(filename, 100, ".\\error\\error_undecided_%H_%M_%S.png", timeinfo);
 			imwrite(filename, err);
 			if (!decided) {
 				halt = true;
