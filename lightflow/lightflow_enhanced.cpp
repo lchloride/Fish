@@ -3,6 +3,7 @@
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/video/background_segm.hpp"
 #include "selectionsort.h"
+#include "areaStatistic.h"
 
 #include <iostream>
 #include <ctype.h>
@@ -50,6 +51,7 @@ const int median_thres = 9;//中值滤波的单位窗口大小
 int fish_num = 2;
 bool halt = false; // 强制退出标志
 Scalar contour_color[] = { Scalar(0, 165, 255), Scalar(238, 95, 209) };
+AreaStatistic area_statistic;
 
 //static void onMouse(int event, int x, int y, int /*flags*/, void* /*param*/)
 //{
@@ -392,6 +394,7 @@ void seperateFishesByFeaturePt(Mat mask, int fish_num, vector<Point2f>& feature_
 		area = Mat::zeros(mask.size(), CV_8UC1);
 		drawContours(area, contours, max_idx, Scalar(255), CV_FILLED, 8, hierarchy);
 		drawContours(dst, contours, max_idx, Scalar(0,0,120), CV_FILLED, 8, hierarchy);
+		area_statistic.pushArea(contourArea(contours[max_idx])); // 统计每条鱼的面积的均值和方差
 
 		for (int j = 0; j < feature_points.size(); j++) {
 			if (area.at<uchar>(feature_points[j]) != 0) {
@@ -490,7 +493,9 @@ void matchArea(Mat gray, Mat mask, vector<Point2f>& points, vector<int>& points_
 			}
 			for (int j = 0; j < count_min_dist.size(); j++)
 				if (count_min_dist[j] == max_count) {
-					drawContours(err, contours, j, Scalar(180, 60, 120), CV_FILLED, 8, hierarchy);
+					drawContours(err, contours, j, Scalar(212, 255, 127), CV_FILLED, 8, hierarchy);
+					double area = contourArea(contours[j]);
+					cout << "Matching area decision: " << j << ", area: " << area << ", " << area_statistic.checkRange(area) << endl;
 				}
 			for (int j = 0; j < points.size(); j++)
 				circle(err, points[j], 3, Scalar(255));
@@ -524,6 +529,10 @@ void matchArea(Mat gray, Mat mask, vector<Point2f>& points, vector<int>& points_
 		return;
 	}
 	else {
+		for (int i = 0; i < match.size(); i++)
+			area_statistic.pushArea(contourArea(contours[match[i]]));
+		cout << "avg:" << area_statistic.getAvg() << ", var:" << area_statistic.getVar() << endl;
+
 		// 更新上一帧的点，删掉不在新区域的点
 		;// 之后再做
 
