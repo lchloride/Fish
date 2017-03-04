@@ -491,23 +491,51 @@ void matchArea(Mat gray, Mat mask, vector<Point2f>& points, vector<int>& points_
 			for (int j = 0; j < contours.size(); j++) {
 				drawContours(err, contours, j, Scalar(200, 0, 120), CV_FILLED, 8, hierarchy);
 			}
+			bool decided = false;
 			for (int j = 0; j < count_min_dist.size(); j++)
 				if (count_min_dist[j] == max_count) {
 					drawContours(err, contours, j, Scalar(212, 255, 127), CV_FILLED, 8, hierarchy);
 					double area = contourArea(contours[j]);
 					cout << "Matching area decision: " << j << ", area: " << area << ", " << area_statistic.checkRange(area) << endl;
+					if (area_statistic.checkRange(area)) {
+						//这个区域的面积是独立的一条鱼的概率很大
+						match[i] = j;
+						decided = true;
+						break;
+					}
 				}
+			if (!decided) {
+				int max_idx = 0;
+				int max_area = 0;
+				for (int j = 0; j < count_min_dist.size(); j++)
+					if (count_min_dist[j] == max_count) {
+						double d = contourArea(contours[j]);
+						if (d > max_area) {
+							max_area = d;
+							max_idx = j;
+						}
+					}
+				cout << "Max area: " << max_area << ", index: " << max_idx << endl;
+				match[i] = max_idx;
+				decided = true;
+			}
+
 			for (int j = 0; j < points.size(); j++)
-				circle(err, points[j], 3, Scalar(255));
+				circle(err, points[j], 3, Scalar(120,255, 0));
 			char filename[100] = { 0 };
 			time_t rawtime;
 			struct tm * timeinfo;
 			time(&rawtime);
 			timeinfo = localtime(&rawtime);
-			strftime(filename, 100, "error_%H_%M_%S.png", timeinfo);
+			if (decided)
+				strftime(filename, 100, "error_decided_%H_%M_%S.png", timeinfo);
+			else
+				strftime(filename, 100, "error_undecided_%H_%M_%S.png", timeinfo);
 			imwrite(filename, err);
-			halt = true;
-			return;
+			if (!decided) {
+				halt = true;
+				return;
+			}
 		}
 	}
 
