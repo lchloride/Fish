@@ -28,15 +28,11 @@ void matchArea(Mat gray, Mat mask, vector<Point2f>& points, vector<int>& points_
 static void help()
 {
 	// print a welcome message, and the OpenCV version
-	cout << "\nThis is a demo of Lukas-Kanade optical flow lkdemo(),\n"
+	cout << "\n使用 Lucas Kanade 算法追踪多条鱼\n"
 		"Using OpenCV version " << CV_VERSION << endl;
-	cout << "\nIt uses camera by default, but you can provide a path to video as an argument.\n";
 	cout << "\nHot keys: \n"
 		"\tESC - quit the program\n"
-		"\tr - auto-initialize tracking\n"
-		"\tc - delete all the points\n"
-		"\tn - switch the \"night\" mode on/off\n"
-		"To add/remove a feature point click it\n" << endl;
+		"\tn - switch the \"night\" mode on/off\n"<< endl;
 }
 
 Point2f point;
@@ -50,25 +46,16 @@ Point st, ed;
 const int median_thres = 9;//中值滤波的单位窗口大小
 int fish_num = 2;
 bool halt = false; // 强制退出标志
-Scalar contour_color[] = { Scalar(0, 165, 255), Scalar(238, 95, 209) };
+Scalar contour_color[] = { Scalar(0, 165, 255), Scalar(255, 191, 0) };
 AreaStatistic area_statistic;
 const int init_time = 2;// 初始化的时长
-
-//static void onMouse(int event, int x, int y, int /*flags*/, void* /*param*/)
-//{
-//	if (event == CV_EVENT_LBUTTONDOWN)
-//	{
-//		point = Point2f((float)x, (float)y);
-//		addRemovePt = true;
-//	}
-//}
 
 int main(int argc, char** argv)
 {
 	help();
 
 	TermCriteria termcrit(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 20, 0.03);
-	Size subPixWinSize(10, 10), winSize(31, 31);
+	Size subPixWinSize(10, 10), winSize(41, 41);
 
 	const int MAX_COUNT = 5;
 	bool needToInit = true;
@@ -168,6 +155,10 @@ int main(int argc, char** argv)
 
 			for (int j = 0; j < fish_num; j++) {
 				cout << "Fish " << j << ": ";
+				if (points_index[j] == points_index[j + 1]) {
+					cout << "Target is lost" << endl;
+					halt = true;
+				}
 				for (int h = points_index[j]; h < points_index[j + 1]; h++)
 					cout << "(" << points[1][h].x << ", " << points[1][h].y << ") ";
 				cout << endl;
@@ -185,11 +176,11 @@ int main(int argc, char** argv)
 		switch (c)
 		{
 		case 'r':
-			needToInit = true;
+			//needToInit = true;
 			break;
 		case 'c':
-			points[0].clear();
-			points[1].clear();
+			//points[0].clear();
+			//points[1].clear();
 			break;
 		case 'n':
 			nightMode = !nightMode;
@@ -230,7 +221,7 @@ void refineSegments(const Mat& img, Mat& mask)
 	temp = mask;
 	dilate(mask, temp, Mat(3, 3, CV_8U), Point(-1, -1), niters);
 	erode(temp, temp, Mat(3, 3, CV_8U), Point(-1, -1), niters+1);
-	dilate(temp, temp, Mat(4,4,CV_8U), Point(-1, -1), niters+1);
+	dilate(temp, temp, Mat(3,3,CV_8U), Point(-1, -1), niters+1);
 	temp.copyTo(mask);
 	
 
@@ -567,6 +558,9 @@ void matchArea(Mat gray, Mat mask, vector<Point2f>& points, vector<int>& points_
 		// 寻找本帧的角点，鱼的对应部分会被保留
 		vector<Point2f> new_feature_points;
 		GoodFeaturesToTrack(gray, mask, new_feature_points);
+		for (int i = 0; i < points.size(); i++)
+			new_feature_points.push_back(points[i]);
+
 		vector<int>position(new_feature_points.size(), -1);
 		// 求出每个新的特征点属于的区域
 		for (int i = 0; i < new_feature_points.size(); i++) {
