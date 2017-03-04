@@ -6,13 +6,14 @@
 
 #include <iostream>
 #include <ctype.h>
+#include <ctime>
 
 using namespace cv;
 using namespace std;
 
 void refineSegments(const Mat& img, Mat& mask);
 void getObject(const Mat frame, Mat &dst, Mat &fgmask);
-void GoodFeaturesToTrack(const Mat src, Mat &dst, const Mat mask, vector<Point2f>& corners);
+void GoodFeaturesToTrack(const Mat src, const Mat mask, vector<Point2f>& corners);
 void seperateHeadTail(Mat src, Mat& dst, vector<Point2f> corners);
 void drawArrow(cv::Mat& img, cv::Point pStart, cv::Point pEnd, int len, int alpha,
 	cv::Scalar& color, int thickness=1, int lineType=8);
@@ -20,7 +21,8 @@ void seperateFishesByFeaturePt(Mat mask, int fish_num, vector<Point2f>& feature_
 	vector<int> &feature_points_index);
 int getPointsIdx(vector<int> idx, int x);
 bool checkFeaturePoints(vector<int> points_index);
-void matchArea(Mat mask, vector<Point2f> points);
+void matchArea(Mat gray, Mat mask, vector<Point2f>& points, vector<int>& points_index, Mat& dst);
+
 
 static void help()
 {
@@ -46,6 +48,8 @@ const int thres = 13; //为了识别头部而进行的阈值化操作的阈值(应该需要自学习)
 Point st, ed;
 const int median_thres = 9;//中值滤波的单位窗口大小
 int fish_num = 2;
+bool halt = false; // 强制退出标志
+Scalar contour_color[] = { Scalar(0, 165, 255), Scalar(238, 95, 209) };
 
 //static void onMouse(int event, int x, int y, int /*flags*/, void* /*param*/)
 //{
@@ -97,7 +101,6 @@ int main(int argc, char** argv)
 		// 备份视频帧为图片
 		frame.copyTo(image);
 		GaussianBlur(image, image, Size(5, 5), 0, 0);
-		//medianBlur(image, image, median_thres);
 		// 将图片转成灰度图
 		cvtColor(image, gray, COLOR_BGR2GRAY);
 
@@ -115,16 +118,8 @@ int main(int argc, char** argv)
 		{
 			// automatic initialization
 			// 找角点
-			GoodFeaturesToTrack(gray, dst, fgmask, points[1]);
-			if (points[0].size() == 0)
-				seperateFishesByFeaturePt(fgmask, fish_num, points[1], points_index);
-			else {
-				matchArea(fgmask, points[0]);
-				points[1].insert(points[1].end(), points[0].begin(), points[0].end());
-			}
-			//seperateHeadTail(gray, dst, points[1]);
-			// 亚像素级角点检测
-			//cornerSubPix(gray, points[1], subPixWinSize, Size(-1, -1), termcrit);
+			GoodFeaturesToTrack(gray, fgmask, points[1]);
+			seperateFishesByFeaturePt(fgmask, fish_num, points[1], points_index);
 			needToInit = false;
 		}
 		else if (!points[0].empty())
@@ -141,15 +136,6 @@ int main(int argc, char** argv)
 
 			for (i = k = 0; i < points[1].size(); i++)
 			{
-			//	if (addRemovePt)
-			//	{
-			//		if (norm(point - points[1][i]) <= 5)
-			//		{
-			//			addRemovePt = false;
-			//			continue;
-			//		}
-			//	}
-
 				if (!status[i]) { // 本帧中上一帧对应的点丢失
 					cout << "Discard: " << i << endl;
 					for (int j = getPointsIdx(points_index, i) + 1; j <= fish_num; j++)
@@ -160,16 +146,15 @@ int main(int argc, char** argv)
 						cout << new_points_index[j] << " ";
 					cout << endl;
 					
-					circle(image, points[0][i], 3, Scalar(0, 0, 255), -1);//上一帧丢失的点
+					circle(dst, points[0][i], 3, Scalar(0, 0, 255), -1);//上一帧丢失的点
 					continue;
 				}
 
-				circle(image, points[0][i], 3, Scalar(0, 255, 0), -1);//line end
-				circle(image, points[1][i], 3, Scalar(255, 0, 0), -1);//line start
-				drawArrow(image, points[0][i], points[1][i], 6, 30, Scalar(0, 255, 255));//an arrow from start to end
+				circle(dst, points[0][i], 3, Scalar(0, 255, 0), -1);//line end
+				circle(dst, points[1][i], 3, Scalar(255, 0, 0), -1);//line start
+				drawArrow(dst, points[0][i], points[1][i], 6, 30, Scalar(0, 255, 255));//an arrow from start to end
 
 				points[1][k++] = points[1][i];
-				//cout << "[" << err[i] <<"] ";
 
 			}
 			points[1].resize(k);
@@ -181,25 +166,15 @@ int main(int argc, char** argv)
 					cout << "(" << points[1][h].x << ", " << points[1][h].y << ") ";
 				cout << endl;
 			}
-			if (checkFeaturePoints(points_index))
-				needToInit = true;
+
+			matchArea(gray, fgmask, points[1], points_index, dst);
 		}
 
-		//if (addRemovePt && points[1].size() < (size_t)MAX_COUNT)
-		//{
-		//	vector<Point2f> tmp;
-		//	tmp.push_back(point);
-		//	cornerSubPix(gray, tmp, winSize, cvSize(-1, -1), termcrit);
-		//	points[1].push_back(tmp[0]);
-		//	addRemovePt = false;
-		//}
-
-		//needToInit = false;
-		imshow("LK Demo", image);
+		imshow("LK Demo", dst);
 		
 
 		char c = (char)waitKey(10);
-		if (c == 27)
+		if (halt || c == 27)
 			break;
 		switch (c)
 		{
@@ -248,10 +223,8 @@ void getObject(const Mat frame, Mat &dst, Mat &fgmask)
 void refineSegments(const Mat& img, Mat& mask)
 {
 	int niters = 1;
-
 	Mat temp;
 
-	//contours.clear();
 	temp = mask;
 	dilate(mask, temp, Mat(3, 3, CV_8U), Point(-1, -1), niters);
 	erode(temp, temp, Mat(3, 3, CV_8U), Point(-1, -1), niters+1);
@@ -263,7 +236,7 @@ void refineSegments(const Mat& img, Mat& mask)
 
 //使用角点检测算法对鱼的轮廓进行角点检测，得到的特征点为头尾，
 //并提取头尾的坐标，以坐标原点的原点
-void GoodFeaturesToTrack(const Mat src, Mat &dst, const Mat mask, vector<Point2f>& corners)
+void GoodFeaturesToTrack(const Mat src, const Mat mask, vector<Point2f>& corners)
 {
 	//Shi-Tomasi算法（goodFeaturesToTrack函数）的参数准备
 	double qualityLevel = 0.1;//角点检测可接受的最小特征值
@@ -281,15 +254,6 @@ void GoodFeaturesToTrack(const Mat src, Mat &dst, const Mat mask, vector<Point2f
 		blockSize,//计算导数自相关矩阵时指定的邻域范围
 		false,//不使用Harris角点检测
 		k);//权重系数
-		   //输出文字信息
-		   //cout << "\t>此次检测到的角点数量为：" << corners.size() << endl;
-	for (int i = 0; i < corners.size(); i++)
-	{
-		////以随机的颜色绘制出角点
-		//circle(dst, corners[i], r, Scalar(g_rng.uniform(0, 200), g_rng.uniform(0, 200),
-		//	g_rng.uniform(0, 200)), -1, 8, 0);
-		circle(dst, corners[i], r, Scalar(255, 0, 0), -1, 8, 0);
-	}
 }
 
 //该函数将头尾两个特征点区分开来，使用阈值化的方法
@@ -462,7 +426,7 @@ bool checkFeaturePoints(vector<int> points_index) {
 	return false;
 }
 
-void matchArea(Mat mask, vector<Point2f> points) {
+void matchArea(Mat gray, Mat mask, vector<Point2f>& points, vector<int>& points_index, Mat& dst) {
 	vector<Vec4i> hierarchy;
 	vector<vector<Point> > contours;
 	// 找出所有轮廓
@@ -488,6 +452,105 @@ void matchArea(Mat mask, vector<Point2f> points) {
 		points_min_dist.push_back(min_dist);
 	}
 	cout << "points_min_dist" << endl;
-	for (int i = 0; i < points_min_dist.size(); i++)
-		cout << points_min_idx[i] << ", " << points_min_dist[i] << endl;
+	//for (int i = 0; i < points_min_dist.size(); i++)
+	//	cout << points_min_idx[i] << ", " << points_min_dist[i] << endl;
+	//cout << endl;
+
+	vector<int> match(points_index.size() - 1, -1); // match存储了上一帧到这一帧每条鱼的映射关系
+	for (int i = 0; i < points_index.size() - 1; i++) {
+		// 统计最短距离出现的次数，也即该条鱼的每个点最有可能对应到新一帧的哪个区域中
+		vector<int> count_min_dist(contours.size(), 0);
+		for (int j = points_index[i]; j < points_index[i+1]; j++)
+			count_min_dist[points_min_idx[j]]++;
+		// 找出最短距离出现的次数中的最大值，即检测这条鱼最有可能对应到哪(几)个区域
+		int max_count = 0; // 存储该最大值
+		int max_count_times = 0; // 存储该最大值出现的次数，最好是为1
+		for (int j = 0; j < count_min_dist.size(); j++)
+			if (count_min_dist[j] > max_count) {
+				max_count = count_min_dist[j];
+				max_count_times = 1;
+			}
+			else if (count_min_dist[j] == max_count)
+				max_count_times++;
+
+		if (max_count_times == 1) {
+			// 存储这条鱼在新的一帧中的区域编号
+			for (int j = 0; j < count_min_dist.size(); j++)
+				if (count_min_dist[j] == max_count) {
+					match[i] = j;
+					break;
+				}
+		}
+		else {
+			// 有多个区域都可能是这条鱼在新视频帧中的对应
+			Mat err = Mat::zeros(mask.size(), CV_8UC3);
+
+			for (int j = 0; j < contours.size(); j++) {
+				drawContours(err, contours, j, Scalar(200, 0, 120), CV_FILLED, 8, hierarchy);
+			}
+			for (int j = 0; j < count_min_dist.size(); j++)
+				if (count_min_dist[j] == max_count) {
+					drawContours(err, contours, j, Scalar(180, 60, 120), CV_FILLED, 8, hierarchy);
+				}
+			for (int j = 0; j < points.size(); j++)
+				circle(err, points[j], 3, Scalar(255));
+			char filename[100] = { 0 };
+			time_t rawtime;
+			struct tm * timeinfo;
+			time(&rawtime);
+			timeinfo = localtime(&rawtime);
+			strftime(filename, 100, "error_%H_%M_%S.png", timeinfo);
+			imwrite(filename, err);
+			halt = true;
+			return;
+		}
+	}
+
+	// 已经获取到每条鱼在上一帧和这一帧的对应关系，存在match中
+	// 继而检查鱼的区域是否有重叠
+	bool overlap = false;
+	for (int i = 0; i < points_index.size() - 1; i++) {
+		for (int j = i+1; j < points_index.size() - 1; j++) {
+			if (match[i] == match[j]) {
+				overlap = true;
+				break;
+			}
+		}
+	}
+	if (overlap) {
+		cout << "Overlap!" << endl;
+		for (int i = 0; i < match.size(); i++)
+			drawContours(dst, contours, match[i], contour_color[i], 2);
+		return;
+	}
+	else {
+		// 更新上一帧的点，删掉不在新区域的点
+		;// 之后再做
+
+		// 寻找本帧的角点，鱼的对应部分会被保留
+		vector<Point2f> new_feature_points;
+		GoodFeaturesToTrack(gray, mask, new_feature_points);
+		vector<int>position(new_feature_points.size(), -1);
+		// 求出每个新的特征点属于的区域
+		for (int i = 0; i < new_feature_points.size(); i++) {
+			for (int j = 0; j < contours.size(); j++) {
+				double d = pointPolygonTest(contours[j], new_feature_points[i], true); //
+				if (d >= 0) {
+					position[i] = j;
+					break;
+				}
+			}
+		}
+
+		points.clear();
+		for (int i = 0; i < match.size(); i++) {
+			for (int j = 0; j < new_feature_points.size(); j++)
+				if (position[j] == match[i]) {
+					points.push_back(new_feature_points[j]);
+				}
+			points_index[i + 1] = points.size();
+			drawContours(dst, contours, match[i], contour_color[i], 2);
+		}
+	}
+
 }
