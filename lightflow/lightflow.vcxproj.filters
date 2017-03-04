@@ -21,12 +21,18 @@
     <ClInclude Include="selectionsort.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="areaStatistic.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="lightflow_enhanced.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="selectionSort.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="areaStatistic.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

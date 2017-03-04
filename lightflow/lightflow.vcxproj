@@ -19,10 +19,12 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="areaStatistic.h" />
     <ClInclude Include="selectionsort.h" />
     <ClInclude Include="stdafx.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="areaStatistic.cpp" />
     <ClCompile Include="lightflow_enhanced.cpp" />
     <ClCompile Include="selectionSort.cpp" />
   </ItemGroup>
