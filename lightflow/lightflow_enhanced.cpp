@@ -68,7 +68,7 @@ int main(int argc, char** argv)
 	help();
 
 	TermCriteria termcrit(CV_TERMCRIT_ITER | CV_TERMCRIT_EPS, 20, 0.03);
-	Size subPixWinSize(10, 10), winSize(31, 31);
+	Size subPixWinSize(10, 10), winSize(41, 41);
 
 	const int MAX_COUNT = 5;
 	bool needToInit = true;
@@ -230,7 +230,7 @@ void refineSegments(const Mat& img, Mat& mask)
 	temp = mask;
 	dilate(mask, temp, Mat(3, 3, CV_8U), Point(-1, -1), niters);
 	erode(temp, temp, Mat(3, 3, CV_8U), Point(-1, -1), niters+1);
-	dilate(temp, temp, Mat(4,4,CV_8U), Point(-1, -1), niters+1);
+	dilate(temp, temp, Mat(3,3,CV_8U), Point(-1, -1), niters+1);
 	temp.copyTo(mask);
 	
 
@@ -567,6 +567,9 @@ void matchArea(Mat gray, Mat mask, vector<Point2f>& points, vector<int>& points_
 		// 寻找本帧的角点，鱼的对应部分会被保留
 		vector<Point2f> new_feature_points;
 		GoodFeaturesToTrack(gray, mask, new_feature_points);
+		for (int i = 0; i < points.size(); i++)
+			new_feature_points.push_back(points[i]);
+
 		vector<int>position(new_feature_points.size(), -1);
 		// 求出每个新的特征点属于的区域
 		for (int i = 0; i < new_feature_points.size(); i++) {
